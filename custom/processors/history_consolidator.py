@@ -81,6 +81,8 @@ class HistoryConsolidator:
 
         if self.output_node.exists():
             existing = self.output_node.read()
+            if existing.schema.get("date") != pl.Date:
+                existing = existing.with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
             combined = pl.concat([existing, new_data], how="vertical")
         else:
             combined = new_data
