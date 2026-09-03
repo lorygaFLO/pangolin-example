@@ -1,0 +1,25 @@
+# Registry for the stock-prices validation step (pipelines/stock_forecast_pipeline.py).
+# One glob pattern covers every ticker: "*_STOCK_PRICES.csv" matches
+# AMZN_STOCK_PRICES.csv, MSFT_STOCK_PRICES.csv, AAPL_STOCK_PRICES.csv, ...
+# as written by custom/processors/yahoo_downloader.py.
+#
+# Deliberately simple, "obvious" checks — all built-in validators
+# (pangolin.utils.validators), nothing custom needed here.
+
+"*_STOCK_PRICES.csv":
+  validators:
+    is_empty_dataframe:
+    required_columns:
+      - ticker
+      - date
+      - open
+      - high
+      - low
+      - close
+      - volume
+    value_range:
+      open: { min: 0 }
+      high: { min: 0 }
+      low: { min: 0 }
+      close: { min: 0 }
+      volume: { min: 0 }

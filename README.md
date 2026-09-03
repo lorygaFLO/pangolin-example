@@ -90,6 +90,33 @@ anywhere in the project, read from `.env`/the environment exactly like the
 built-in fields, with the same Pydantic validation. No changes to the
 pangolin library needed. Delete `custom/settings.py` if you never need this.
 
+## Stock forecast example (Yahoo Finance + Chronos)
+
+A second, self-contained pipeline lives alongside the sales example above:
+`pipelines/stock_forecast_pipeline.py`. It downloads OHLCV history for the
+tickers in `S.STOCK_TICKERS` (`.env`) from Yahoo Finance, validates it,
+accumulates it into a persistent history, and forecasts
+`S.STOCK_FORECAST_HORIZON` trading days ahead with Amazon's Chronos model.
+
+1. `pip install -r requirements.txt` (also installs `pangolin` itself from
+   `../pangolin`, in editable mode — adjust the path in `requirements.txt`
+   if your checkout is laid out differently).
+2. `pangolin run stock_forecast_pipeline`
+3. Open `notebooks/stock_forecast_review.ipynb` to review the result: one
+   file per ticker at `data/stocks/forecast/<TICKER>_STOCK_PRICES.csv`,
+   holding **both** the historical prices and the forecast, distinguished by
+   the `record_type` column (`"history"` / `"forecast"`) — no database, no
+   separate forecast file.
+
+It's also a worked example of the two processor styles pangolin supports:
+
+| Step | Processor | Style |
+| --- | --- | --- |
+| 1. Download | `custom/processors/yahoo_downloader.py` | ad-hoc (no registry) |
+| 2. Validate | pangolin's built-in `Validator` | registry pattern-match, `config/registries/stock_prices_validator.yaml` (`"*_STOCK_PRICES.csv"`) |
+| 3. Historicize | `custom/processors/history_consolidator.py` | ad-hoc (no registry) |
+| 4. Forecast | `custom/processors/chronos_forecaster.py` | ad-hoc (no registry) |
+
 ## Running it in Docker
 
 Not scaffolded for this project. Re-run `pangolin init --dockerization` (or `-d`) in this same folder to add it — existing files are left untouched unless you also pass `--force`.

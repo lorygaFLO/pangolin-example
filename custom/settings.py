@@ -37,4 +37,9 @@ class SETTINGS(_BaseSettings):
     #
     # See pydantic-settings docs for supported types, or the "Adding Custom
     # Settings" page in the docs for validators / computed fields.
-    pass
+
+    # --- Stock forecast example pipeline (pipelines/stock_forecast_pipeline.py) ---
+    STOCK_TICKERS: list[str] = ["AAPL", "MSFT", "AMZN"]  # Yahoo Finance tickers to download
+    STOCK_HISTORY_PERIOD: str = "2y"  # yfinance 'period' string, e.g. "1y", "5y", "max"
+    STOCK_FORECAST_HORIZON: int = 14  # trading days to forecast ahead with Chronos
+    CHRONOS_MODEL: str = "amazon/chronos-t5-small"  # Hugging Face model id used by ChronosPipeline

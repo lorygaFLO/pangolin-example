@@ -1,0 +1,26 @@
+# pangolin itself — installed in editable mode from the sibling repo. This
+# assumes ../pangolin exists next to this project (adjust the relative path,
+# or swap this line for a pinned version from an internal index, once
+# pangolin is published there). Pulls in polars==1.23.0, prefect, etc. —
+# don't re-pin polars below, it would conflict with pangolin's own pin.
+-e ../pangolin
+
+# --- Stock forecast example pipeline (pipelines/stock_forecast_pipeline.py) ---
+
+# Yahoo Finance historical price download (custom/processors/yahoo_downloader.py)
+yfinance==1.7.0
+
+# Time-series forecasting with Amazon's Chronos (custom/processors/chronos_forecaster.py)
+# CPU is enough for the default "amazon/chronos-t5-small" model. The plain
+# PyPI wheel below works CPU-only out of the box; for a smaller, CPU-only
+# download see https://pytorch.org/get-started/locally/
+chronos-forecasting==2.3.1
+# torch>=2.14 unconditionally requires setuptools>=77.0.3, which conflicts
+# with pangolin's own setuptools==76.0.0 pin. 2.9.0 only requires it on
+# Python >=3.12 (irrelevant here) and still satisfies chronos-forecasting's
+# own torch>=2.2,<3 requirement.
+torch==2.9.0
+
+# Notebooks used to review the results (notebooks/stock_forecast_review.ipynb)
+jupyter==1.1.1
+matplotlib==3.10.9  # 3.11+ requires Python >=3.11; this project targets 3.10

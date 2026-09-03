@@ -42,3 +42,28 @@ reports:
 # Custom folders (not driven by Settings)
 static:
   _description: "Static support files"
+
+# --- Stock forecast example (see pipelines/stock_forecast_pipeline.py) ---
+# raw/staging are ephemeral (_timestamped: true -> a new data/stocks/.../<RUN_ID>/
+# folder every run). history/forecast are NOT timestamped: same path every
+# run, so history can accumulate and the notebook always finds the latest
+# forecast at a fixed location.
+stocks:
+  _description: "Yahoo Finance download -> validation -> history -> Chronos forecast"
+
+  raw:
+    _description: "Per-ticker OHLCV CSVs freshly downloaded from Yahoo Finance"
+    _timestamped: true
+
+  staging:
+    _description: "Per-ticker files validated against config/registries/stock_prices_validator.yaml"
+    _timestamped: true
+    stock_prices_validator:
+      _pattern_matching: true
+      _registry: "config/registries/stock_prices_validator.yaml"
+
+  history:
+    _description: "Persistent per-ticker price history, deduplicated by date and accumulated across runs"
+
+  forecast:
+    _description: "Final deliverable: one file per ticker, history + Chronos forecast rows, flagged by 'record_type'"
