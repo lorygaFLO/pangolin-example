@@ -43,9 +43,4 @@ class SETTINGS(_BaseSettings):
     STOCK_HISTORY_PERIOD: str = "2y"  # yfinance 'period' string, e.g. "1y", "5y", "max"
     STOCK_FORECAST_HORIZON: int = 14  # trading days to forecast ahead with Chronos
     CHRONOS_MODEL: str = "amazon/chronos-t5-small"  # Hugging Face model id used by ChronosPipeline
-    # Sample paths Chronos draws per forecast (default is 20 for chronos-t5-*
-    # models). forecast_low/forecast_high (10th/90th percentile) are computed
-    # from these — 20 makes that estimate noisy, so the band can jitter
-    # wider/narrower day to day instead of widening smoothly. More samples
-    # = smoother, more stable band, at the cost of a bit more CPU time.
     STOCK_FORECAST_NUM_SAMPLES: int = 100

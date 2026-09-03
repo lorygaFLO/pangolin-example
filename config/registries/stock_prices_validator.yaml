@@ -5,6 +5,11 @@
 #
 # Deliberately simple, "obvious" checks — all built-in validators
 # (pangolin.utils.validators), nothing custom needed here.
+#
+# required_columns below must stay in sync with STOCK_PRICE_COLUMNS in
+# custom/processors/_schema.py — this file has to be a plain YAML list (the
+# pattern-match step's declarative contract), so it can't import that
+# constant, but the two lists are meant to describe the same schema.
 
 "*_STOCK_PRICES.csv":
   validators:

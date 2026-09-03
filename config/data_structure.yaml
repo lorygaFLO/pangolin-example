@@ -51,19 +51,21 @@ static:
 stocks:
   _description: "Yahoo Finance download -> validation -> history -> Chronos forecast"
 
-  raw:
+  0_raw:
     _description: "Per-ticker OHLCV CSVs freshly downloaded from Yahoo Finance"
     _timestamped: true
 
-  staging:
+  1_staging:
     _description: "Per-ticker files validated against config/registries/stock_prices_validator.yaml"
     _timestamped: true
     stock_prices_validator:
       _pattern_matching: true
       _registry: "config/registries/stock_prices_validator.yaml"
 
-  history:
-    _description: "Persistent per-ticker price history, deduplicated by date and accumulated across runs"
+  2_history:
+    _description: "Single table, all tickers together (see 'ticker' column): persistent price history, deduplicated by (ticker, date) and accumulated across runs"
+    _filename: "stock_prices_history.csv"
 
-  forecast:
-    _description: "Final deliverable: one file per ticker, history + Chronos forecast rows, flagged by 'record_type'"
+  3_forecast:
+    _description: "Single table, all tickers together: history + Chronos forecast rows, flagged by 'record_type'"
+    _filename: "stock_prices_forecast.csv"

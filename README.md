@@ -102,11 +102,12 @@ accumulates it into a persistent history, and forecasts
    `../pangolin`, in editable mode — adjust the path in `requirements.txt`
    if your checkout is laid out differently).
 2. `pangolin run stock_forecast_pipeline`
-3. Open `notebooks/stock_forecast_review.ipynb` to review the result: one
-   file per ticker at `data/stocks/forecast/<TICKER>_STOCK_PRICES.csv`,
-   holding **both** the historical prices and the forecast, distinguished by
-   the `record_type` column (`"history"` / `"forecast"`) — no database, no
-   separate forecast file.
+3. Open `notebooks/stock_forecast_review.ipynb` to review the result: a
+   single table for every ticker at
+   `data/stocks/3_forecast/stock_prices_forecast.csv` (see the `ticker`
+   column), holding **both** the historical prices and the forecast,
+   distinguished by the `record_type` column (`"history"` / `"forecast"`) —
+   no database, no separate forecast file.
 
 It's also a worked example of the two processor styles pangolin supports:
 

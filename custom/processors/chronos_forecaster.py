@@ -1,13 +1,14 @@
-"""Ad-hoc (non-pattern-match) processor: for each ticker's consolidated
-history file, forecasts the next S.STOCK_FORECAST_HORIZON trading days with
-Amazon's Chronos time-series model, and writes back ONE file per ticker
-containing BOTH the historical rows and the forecast rows — distinguished
-by a 'record_type' column ('history' | 'forecast'). No separate forecast
-file, no database: history and forecast live side by side in the same CSV.
+"""Ad-hoc (non-pattern-match) processor: reads the single consolidated
+history table (all tickers, one 'ticker' column), forecasts the next
+S.STOCK_FORECAST_HORIZON trading days per ticker with Amazon's Chronos
+time-series model, and writes back ONE combined table containing BOTH the
+historical rows and the forecast rows for every ticker — distinguished by a
+'record_type' column ('history' | 'forecast'). No per-ticker files, no
+database: everything lives in one table, one write per run.
 
-No registry, no pattern matching: it reads the persistent history via the
-DataFacility / FSWrapper directly, following the same standalone-class
-convention as pangolin's own BackupRestore processor.
+No registry, no pattern matching: it reads/writes through the DataFacility
+directly, following the same standalone-class convention as pangolin's own
+BackupRestore processor.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ import polars as pl
 import torch
 from chronos import ChronosPipeline
 
+from custom.processors._schema import STOCK_PRICE_COLUMNS
 from pangolin.config.run_context import RunContext
 from pangolin.config.settings import get_settings
 from pangolin.engine.DataFacility import get_project_data
@@ -26,22 +28,12 @@ from pangolin.engine.common.exceptions import NoInputFilesError
 from pangolin.engine.common.logger import ProcessorLogger
 from pangolin.utils.fs_wrapper import FSWrapper
 
-# Output schema, in this exact order — history rows and forecast rows share
-# it, which is what lets them live in the same file. open/high/low/volume
-# are left null on forecast rows: Chronos here forecasts 'close' only.
-_OUTPUT_SCHEMA = {
-    "ticker": pl.Utf8,
-    "date": pl.Date,
-    "open": pl.Float64,
-    "high": pl.Float64,
-    "low": pl.Float64,
-    "close": pl.Float64,
-    "volume": pl.Int64,
-    "record_type": pl.Utf8,
-    "forecast_low": pl.Float64,
-    "forecast_high": pl.Float64,
-}
-_OUTPUT_COLUMNS = list(_OUTPUT_SCHEMA.keys())
+# Output column order, shared by history rows and forecast rows — that's
+# what lets them live in the same table. Plain "vertical" concat matches by
+# position, not by name, so both sides must select() into this exact order
+# before being combined. Extends the shared base schema with the two
+# columns unique to this step.
+_OUTPUT_COLUMNS = STOCK_PRICE_COLUMNS + ["record_type", "forecast_low", "forecast_high"]
 
 
 def _next_trading_days(start_date, count: int) -> list:
@@ -65,18 +57,18 @@ def _next_trading_days(start_date, count: int) -> list:
 
 
 class ChronosForecaster:
-    """Reads every '<TICKER>_STOCK_PRICES.csv' history file in input_folder,
-    forecasts S.STOCK_FORECAST_HORIZON days ahead with Chronos, and writes
-    '<TICKER>_STOCK_PRICES.csv' (history + forecast rows) to output_folder.
+    """Reads the single consolidated history table at input_node, forecasts
+    S.STOCK_FORECAST_HORIZON days ahead per ticker with Chronos, and writes
+    one combined table (history + forecast rows, every ticker) to output_node.
     """
 
-    def __init__(self, CTX: RunContext, name: str, input_folder: str, output_folder: str):
+    def __init__(self, CTX: RunContext, name: str, input_node: str, output_node: str):
         if not name:
             raise ValueError("Step name must be provided")
-        if not input_folder:
-            raise ValueError("input_folder must be provided")
-        if not output_folder:
-            raise ValueError("output_folder must be provided")
+        if not input_node:
+            raise ValueError("input_node must be provided")
+        if not output_node:
+            raise ValueError("output_node must be provided")
 
         S = get_settings()
         self.S = S
@@ -89,20 +81,12 @@ class ChronosForecaster:
             **getattr(S, "FS_OPTIONS", {}),
         )
         self.D = get_project_data(run_id=CTX.RUN_ID)
-        self.input_node = self._get_node_by_path(input_folder)
-        self.output_node = self._get_node_by_path(output_folder)
-        self.fs.makedirs(str(self.output_node.path), exist_ok=True)
+        self.input_node = self.D.get_node(input_node)
+        self.output_node = self.D.get_node(output_node)
 
         # Loaded lazily on first use, not in __init__: instantiating this
         # processor (e.g. for testing) shouldn't require downloading a model.
         self._pipeline = None
-
-    def _get_node_by_path(self, path_str: str):
-        """Navigate to a node in DataFacility using dot notation."""
-        node = self.D
-        for part in path_str.split("."):
-            node = getattr(node, part)
-        return node
 
     def _load_pipeline(self) -> ChronosPipeline:
         if self._pipeline is None:
@@ -114,76 +98,74 @@ class ChronosForecaster:
             )
         return self._pipeline
 
-    def _forecast_ticker(self, history: pl.DataFrame) -> pl.DataFrame:
+    def _forecast_ticker(self, ticker_history: pl.DataFrame) -> pl.DataFrame:
         """Run Chronos on one ticker's 'close' series and return
-        prediction_length rows in _OUTPUT_SCHEMA (record_type='forecast').
+        prediction_length rows in _OUTPUT_COLUMNS order (record_type='forecast').
         """
         horizon = self.S.STOCK_FORECAST_HORIZON
-        ticker = history["ticker"][0]
+        ticker = ticker_history["ticker"][0]
 
-        context = torch.tensor(history["close"].to_numpy(), dtype=torch.float32)
+        context = torch.tensor(ticker_history["close"].to_numpy(), dtype=torch.float32)
         forecast = self._load_pipeline().predict(
             context, prediction_length=horizon, num_samples=self.S.STOCK_FORECAST_NUM_SAMPLES
         )
         samples = forecast[0].numpy()  # shape: (num_samples, horizon)
         low, median, high = np.quantile(samples, [0.1, 0.5, 0.9], axis=0)
 
-        last_date = history["date"].max()
+        last_date = ticker_history["date"].max()
         forecast_dates = _next_trading_days(last_date, horizon)
 
-        return pl.DataFrame(
-            {
-                "ticker": [ticker] * horizon,
-                "date": forecast_dates,
-                "open": [None] * horizon,
-                "high": [None] * horizon,
-                "low": [None] * horizon,
-                "close": median.tolist(),
-                "volume": [None] * horizon,
-                "record_type": ["forecast"] * horizon,
-                "forecast_low": low.tolist(),
-                "forecast_high": high.tolist(),
-            },
-            schema=_OUTPUT_SCHEMA,
+        # Only close/forecast_low/forecast_high/record_type are real values
+        # here — polars infers their dtype fine from the data itself.
+        # open/high/low/volume aren't forecast (Chronos predicts 'close'
+        # only), so they're added as explicitly-typed nulls: a bare `None`
+        # list has no dtype for polars to infer, which would make the
+        # concat below (history rows are real Float64/Int64) fail.
+        return pl.DataFrame({
+            "ticker": [ticker] * horizon,
+            "date": forecast_dates,
+            "close": median.tolist(),
+            "record_type": ["forecast"] * horizon,
+            "forecast_low": low.tolist(),
+            "forecast_high": high.tolist(),
+        }).with_columns(
+            pl.lit(None, dtype=pl.Float64).alias("open"),
+            pl.lit(None, dtype=pl.Float64).alias("high"),
+            pl.lit(None, dtype=pl.Float64).alias("low"),
+            pl.lit(None, dtype=pl.Int64).alias("volume"),
         ).select(_OUTPUT_COLUMNS)
 
     def execute(self):
-        pattern = self.fs.join(str(self.input_node.path), "*_STOCK_PRICES.csv")
-        files = [f for f in self.fs.glob(pattern) if self.fs.isfile(f)]
-        if not files:
+        if not self.input_node.exists():
+            raise NoInputFilesError(self.name, str(self.input_node.path))
+        history = self.input_node.read()
+        if history.schema.get("date") != pl.Date:
+            history = history.with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
+
+        tickers = history["ticker"].unique().sort().to_list()
+        if not tickers:
             raise NoInputFilesError(self.name, str(self.input_node.path))
 
-        written = []
-        for full_path in files:
-            with self.fs.open(full_path, "rb") as f:
-                history = pl.read_csv(f, separator=self.S.CSV_DELIMITER)
-            if history.schema.get("date") != pl.Date:
-                history = history.with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
-
-            ticker = history["ticker"][0]
+        per_ticker_tables = []
+        for ticker in tickers:
+            ticker_history = history.filter(pl.col("ticker") == ticker).sort("date")
             self.log.info(
                 f"Forecasting '{ticker}': {self.S.STOCK_FORECAST_HORIZON} day(s) ahead "
-                f"from {len(history)} historical row(s)"
+                f"from {len(ticker_history)} historical row(s)"
             )
 
-            history_rows = history.with_columns(
+            history_rows = ticker_history.with_columns(
                 pl.lit("history").alias("record_type"),
                 pl.lit(None, dtype=pl.Float64).alias("forecast_low"),
                 pl.lit(None, dtype=pl.Float64).alias("forecast_high"),
             ).select(_OUTPUT_COLUMNS)
-            forecast_rows = self._forecast_ticker(history)
+            forecast_rows = self._forecast_ticker(ticker_history)
+            per_ticker_tables.append(pl.concat([history_rows, forecast_rows], how="vertical"))
 
-            combined = pl.concat([history_rows, forecast_rows], how="vertical").sort("date")
+        combined = pl.concat(per_ticker_tables, how="vertical").sort(["ticker", "date"])
+        self.output_node.write(combined)
 
-            output_filename = f"{ticker}_STOCK_PRICES.csv"
-            output_path = self.fs.join(str(self.output_node.path), output_filename)
-            with self.fs.open(output_path, "wb") as f:
-                combined.write_csv(f, separator=self.S.CSV_DELIMITER)
-
-            self.log.info(
-                f"Wrote {len(combined)} row(s) ({len(history_rows)} history + "
-                f"{len(forecast_rows)} forecast) to '{output_path}'"
-            )
-            written.append(ticker)
-
-        return written
+        self.log.info(
+            f"Wrote {len(combined)} row(s) across {len(tickers)} ticker(s) to '{self.output_node.path}'"
+        )
+        return tickers

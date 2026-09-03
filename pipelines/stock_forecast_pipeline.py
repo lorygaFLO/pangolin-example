@@ -11,11 +11,17 @@ Demonstrates the two processor styles side by side:
   every '<TICKER>_STOCK_PRICES.csv' file via
   config/registries/stock_prices_validator.yaml (pattern "*_STOCK_PRICES.csv").
 
+Data structure nodes are numbered (0_raw, 1_staging, 2_history, 3_forecast)
+so they sort in pipeline order on disk, same convention as the sales example
+pipeline's staging.0_validator/1_transform/2_audit/3_dispatcher steps. 2_history
+and 3_forecast are single tables — every ticker together, distinguished by
+the 'ticker' column — not one file per ticker.
+
 Try it: adjust STOCK_TICKERS in .env if you want (defaults to
 ["AAPL","MSFT","AMZN"]) and run `pangolin run stock_forecast_pipeline`.
 Then open notebooks/stock_forecast_review.ipynb to review
-data/stocks/forecast/<TICKER>_STOCK_PRICES.csv (history + forecast, flagged
-by the 'record_type' column).
+data/stocks/3_forecast/stock_prices_forecast.csv (history + forecast, every
+ticker, flagged by the 'record_type' column).
 """
 
 from prefect import flow, get_run_logger
@@ -31,7 +37,7 @@ from pangolin.engine.processors.DataValidator import Validator
 @flow(name="1 - Download (Yahoo Finance)")
 def download_flow(CTX: RunContext):
     """Ad-hoc processor: one '<TICKER>_STOCK_PRICES.csv' per S.STOCK_TICKERS entry."""
-    downloader = YahooDownloader(CTX, name="yahoo_downloader", output_folder="stocks.raw")
+    downloader = YahooDownloader(CTX, name="yahoo_downloader", output_folder="stocks.0_raw")
     downloader.execute()
 
 
@@ -43,32 +49,32 @@ def validate_flow(CTX: RunContext):
         CTX,
         name="stock_prices_validator",
         report_folder=S.REPORTS_FOLDER_NAME,
-        input_folder="stocks.raw",
-        output_folder="stocks.staging.stock_prices_validator",
+        input_folder="stocks.0_raw",
+        output_folder="stocks.1_staging.stock_prices_validator",
     )
     validator.execute()
 
 
 @flow(name="3 - Historicize")
 def history_flow(CTX: RunContext):
-    """Ad-hoc processor: merge this run's validated prices into the persistent history."""
+    """Ad-hoc processor: merge this run's validated prices into the persistent history table."""
     consolidator = HistoryConsolidator(
         CTX,
         name="history_consolidator",
-        input_folder="stocks.staging.stock_prices_validator",
-        output_folder="stocks.history",
+        input_folder="stocks.1_staging.stock_prices_validator",
+        output_node="stocks.2_history",
     )
     consolidator.execute()
 
 
 @flow(name="4 - Forecast (Chronos)")
 def forecast_flow(CTX: RunContext):
-    """Ad-hoc processor: writes history + forecast together, flagged by 'record_type'."""
+    """Ad-hoc processor: writes history + forecast together, every ticker, flagged by 'record_type'."""
     forecaster = ChronosForecaster(
         CTX,
         name="chronos_forecaster",
-        input_folder="stocks.history",
-        output_folder="stocks.forecast",
+        input_node="stocks.2_history",
+        output_node="stocks.3_forecast",
     )
     forecaster.execute()
 

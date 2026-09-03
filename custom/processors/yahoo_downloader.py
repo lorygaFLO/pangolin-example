@@ -16,17 +16,13 @@ from __future__ import annotations
 import polars as pl
 import yfinance as yf
 
+from custom.processors._schema import STOCK_PRICE_COLUMNS
 from pangolin.config.run_context import RunContext
 from pangolin.config.settings import get_settings
 from pangolin.engine.DataFacility import get_project_data
 from pangolin.engine.common.exceptions import PipelineError
 from pangolin.engine.common.logger import ProcessorLogger
 from pangolin.utils.fs_wrapper import FSWrapper
-
-# Columns written to '<TICKER>_STOCK_PRICES.csv', in this exact order.
-# The rest of the pipeline (validator registry, history consolidator,
-# Chronos forecaster) all assume this schema.
-_OUTPUT_COLUMNS = ["ticker", "date", "open", "high", "low", "close", "volume"]
 
 
 class YahooDownloader:
@@ -51,15 +47,8 @@ class YahooDownloader:
             **getattr(S, "FS_OPTIONS", {}),
         )
         self.D = get_project_data(run_id=CTX.RUN_ID)
-        self.output_node = self._get_node_by_path(output_folder)
+        self.output_node = self.D.get_node(output_folder)
         self.fs.makedirs(str(self.output_node.path), exist_ok=True)
-
-    def _get_node_by_path(self, path_str: str):
-        """Navigate to a node in DataFacility using dot notation."""
-        node = self.D
-        for part in path_str.split("."):
-            node = getattr(node, part)
-        return node
 
     def _download_one(self, ticker: str) -> pl.DataFrame | None:
         """Download and normalize one ticker's history. Returns None if
@@ -92,7 +81,7 @@ class YahooDownloader:
                 pl.col("Volume").cast(pl.Int64).alias("volume"),
             )
             .with_columns(pl.lit(ticker).alias("ticker"))
-            .select(_OUTPUT_COLUMNS)
+            .select(STOCK_PRICE_COLUMNS)
             .sort("date")
         )
 
