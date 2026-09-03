@@ -122,7 +122,9 @@ class ChronosForecaster:
         ticker = history["ticker"][0]
 
         context = torch.tensor(history["close"].to_numpy(), dtype=torch.float32)
-        forecast = self._load_pipeline().predict(context, prediction_length=horizon)
+        forecast = self._load_pipeline().predict(
+            context, prediction_length=horizon, num_samples=self.S.STOCK_FORECAST_NUM_SAMPLES
+        )
         samples = forecast[0].numpy()  # shape: (num_samples, horizon)
         low, median, high = np.quantile(samples, [0.1, 0.5, 0.9], axis=0)
 
