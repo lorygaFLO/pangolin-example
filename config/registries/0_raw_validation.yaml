@@ -1,0 +1,17 @@
+# Registry for the raw validation step (step 0).
+# Keys are glob patterns matched against input file names; each entry lists
+# the validators to apply. Built-in validators ship with pangolin
+# (pangolin/utils/validators.py); custom ones live in custom/validators.py.
+
+"*sales*":
+  validators:
+    is_empty_dataframe:
+    required_columns:
+      - product_id
+      - product_name
+      - price
+      - quantity
+      - date
+    # Custom validator defined in custom/validators.py
+    quantity_not_negative:
+      quantity_column: quantity

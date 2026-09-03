@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Environments
+.env
+.env.*
+.venv/
+venv/
+
+# Pangolin runtime data (never commit pipeline data)
+data/

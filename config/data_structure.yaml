@@ -1,0 +1,44 @@
+# Data structure of the project. Folder names marked with `_settings_key`
+# are resolved from Settings (overridable via .env).
+# Staging step nodes declare both `_pattern_matching: true` and `_registry`
+# (the registry YAML driving that step).
+
+input:
+  _description: "Folder with input files"
+  _settings_key: "INPUT_FOLDER_NAME"
+
+staging:
+  _description: "Processing area"
+  _settings_key: "STAGING_FOLDER_NAME"
+  _timestamped: true
+  0_validator:
+    _pattern_matching: true
+    _registry: "config/registries/0_raw_validation.yaml"
+  1_transform:
+    _pattern_matching: true
+    _registry: "config/registries/1_transform.yaml"
+  2_audit:
+    _pattern_matching: true
+    _registry: "config/registries/2_audit.yaml"
+  3_dispatcher:
+    _pattern_matching: true
+    _registry: "config/registries/3_dispatcher.yaml"
+
+delivery:
+  _description: "Final output"
+  _settings_key: "DELIVERY_FOLDER_NAME"
+  _timestamped: true
+
+backup:
+  _description: "Backup folder"
+  _settings_key: "BACKUP_FOLDER_NAME"
+  _timestamped: true
+
+reports:
+  _description: "Report files"
+  _settings_key: "REPORTS_FOLDER_NAME"
+  _timestamped: true
+
+# Custom folders (not driven by Settings)
+static:
+  _description: "Static support files"
