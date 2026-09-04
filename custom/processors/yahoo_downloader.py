@@ -85,10 +85,14 @@ class YahooDownloader:
             .sort("date")
         )
 
-    def execute(self):
-        tickers = self.S.STOCK_TICKERS
+    def execute(self, tickers=None):
+        """
+        tickers: optional override list, e.g. from a Prefect run parameter.
+            Falls back to S.STOCK_TICKERS (.env) when not given.
+        """
+        tickers = tickers or self.S.STOCK_TICKERS
         if not tickers:
-            raise PipelineError(f"[{self.name}] S.STOCK_TICKERS is empty — nothing to download.")
+            raise PipelineError(f"[{self.name}] No tickers given (S.STOCK_TICKERS is also empty) — nothing to download.")
 
         self.log.info(
             f"Starting download for {len(tickers)} ticker(s): {tickers} "

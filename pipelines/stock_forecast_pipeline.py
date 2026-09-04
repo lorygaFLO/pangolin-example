@@ -33,7 +33,19 @@ This copies data/stocks/backup/<run_id>/*.csv back into stocks.0_raw for a
 `pangolin step stock_forecast_pipeline <step>`, set DEBUG=True in .env
 first — that pins RUN_ID to DEBUG_RUN_ID, so restore and the following step
 invocations agree on which run folder to use.
+
+Both of the above are also available as ordinary flow **parameters** on
+stock_forecast_pipeline() itself (`tickers`, `restore_from_run_id`) — once
+this pipeline is served with `pangolin deploy`, Prefect's own UI builds a
+parameter form for them straight from these type hints on the "Run"
+button, no extra deployment or library change needed:
+- `tickers`: override S.STOCK_TICKERS for this run only, e.g. ["NVDA"].
+- `restore_from_run_id`: skip the Yahoo Finance download and restore
+  stocks.0_raw from that backup run_id instead (same thing `pangolin
+  restore` does, just triggered from the UI instead of the CLI).
 """
+
+from typing import List, Optional
 
 from prefect import flow, get_run_logger
 
@@ -47,10 +59,13 @@ from pangolin.engine.processors.DataValidator import Validator
 
 
 @flow(name="1 - Download (Yahoo Finance)")
-def download_flow(CTX: RunContext):
-    """Ad-hoc processor: one '<TICKER>_STOCK_PRICES.csv' per S.STOCK_TICKERS entry."""
+def download_flow(CTX: RunContext, tickers: Optional[List[str]] = None):
+    """Ad-hoc processor: one '<TICKER>_STOCK_PRICES.csv' per ticker.
+
+    `tickers` overrides S.STOCK_TICKERS for this run only, when given.
+    """
     downloader = YahooDownloader(CTX, name="yahoo_downloader", output_folder="stocks.0_raw")
-    downloader.execute()
+    downloader.execute(tickers=tickers)
 
 
 @flow(name="2 - Backup Raw Downloads")
@@ -118,12 +133,27 @@ def restore_flow(CTX: RunContext, run_id: str):
     name="Stock Forecast Pipeline",
     description="Download, backup, validate, historicize and forecast stock prices",
 )
-def stock_forecast_pipeline():
+def stock_forecast_pipeline(
+    tickers: Optional[List[str]] = None,
+    restore_from_run_id: Optional[str] = None,
+):
+    """
+    tickers: override S.STOCK_TICKERS for this run only, e.g. ["NVDA"].
+        Leave empty to use whatever's configured in .env.
+    restore_from_run_id: instead of downloading from Yahoo Finance, restore
+        stocks.0_raw from this backup run_id (see stocks.backup/<run_id>/).
+        Leave empty for a normal fresh download.
+    """
     logger = get_run_logger()
     CTX = RunContext()
     logger.info(f"Stock forecast pipeline started - {CTX.summary()}")
 
-    s0 = download_flow(CTX, return_state=True)
+    if restore_from_run_id:
+        logger.info(f"restore_from_run_id given: restoring stocks.0_raw from backup '{restore_from_run_id}' instead of downloading")
+        s0 = restore_flow(CTX, restore_from_run_id, return_state=True)
+    else:
+        s0 = download_flow(CTX, tickers, return_state=True)
+
     s1 = backup_flow(CTX, return_state=True, wait_for=[s0])
     s2 = validate_flow(CTX, return_state=True, wait_for=[s1])
     s3 = history_flow(CTX, return_state=True, wait_for=[s2])
