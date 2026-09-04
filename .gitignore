@@ -13,3 +13,6 @@ venv/
 
 # Pangolin runtime data (never commit pipeline data)
 data/
+
+# Local Prefect state (server DB/profile) — see PREFECT_HOME in .env
+.prefect/

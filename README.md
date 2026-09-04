@@ -99,7 +99,7 @@ installed — if it looks out of date, reinstall pangolin.
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `PROJECT_NAME` | `'pangolin'` | Project identity. Used as the Prefect UI subdomain in docker-local mode and for run tagging. |
+| `PROJECT_NAME` | `'pangolin'` | Project identity. Used as the Prefect UI subdomain in docker-local mode, to isolate this project's local Prefect state directory (see PREFECT_HOME below) from other pangolin projects on the same machine, and for run tagging. |
 | `BACKEND_ENGINE` | `'polars'` | Dataframe engine. Only 'polars' is supported in this release. |
 | `DUCKDB_CHUNK_SIZE` | `100000` | Reserved for a future DuckDB backend; unused today. |
 | `BASEPATH` | `'.'` | Project root. Resolved to an absolute path at startup; also the base DATAPATH is resolved against when DATAPATH is relative. |
@@ -115,6 +115,15 @@ installed — if it looks out of date, reinstall pangolin.
 Plus this project's own, added in `custom/settings.py` (see below):
 `STOCK_TICKERS`, `STOCK_HISTORY_PERIOD`, `STOCK_FORECAST_HORIZON`,
 `STOCK_FORECAST_NUM_SAMPLES`, `CHRONOS_MODEL`.
+
+Not in the table above because it's read directly by pangolin's CLI, not by
+`SETTINGS`: **`PREFECT_HOME`** — this project's local Prefect state
+directory, isolating it from other pangolin projects on this machine. Set
+in `.env` as `.prefect/${PROJECT_NAME}`. `pangolin run` / `deploy` /
+`bootstrap` pick it up automatically; if you also run the bare
+`prefect server start` (e.g. to use the dashboard), export the same value
+in that shell first — see "Running via the Prefect UI" in the pangolin
+library's Getting Started doc.
 
 ## Folder settings (from `config/data_structure.yaml`)
 
