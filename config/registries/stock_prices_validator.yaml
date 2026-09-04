@@ -3,8 +3,9 @@
 # AMZN_STOCK_PRICES.csv, MSFT_STOCK_PRICES.csv, AAPL_STOCK_PRICES.csv, ...
 # as written by custom/processors/yahoo_downloader.py.
 #
-# Deliberately simple, "obvious" checks — all built-in validators
-# (pangolin.utils.validators), nothing custom needed here.
+# Deliberately simple, "obvious" checks — mostly built-in validators
+# (pangolin.utils.validators), plus one custom one (custom/validators.py)
+# for a check pangolin doesn't ship out of the box.
 #
 # required_columns below must stay in sync with STOCK_PRICE_COLUMNS in
 # custom/processors/_schema.py — this file has to be a plain YAML list (the
@@ -28,3 +29,6 @@
       low: { min: 0 }
       close: { min: 0 }
       volume: { min: 0 }
+    # Custom validator defined in custom/validators.py
+    max_daily_price_change:
+      max_pct_change: 0.5
