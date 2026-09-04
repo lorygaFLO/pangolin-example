@@ -122,6 +122,14 @@ exact data with `pangolin step stock_forecast_pipeline <step>`, set
 `DEBUG=True` in `.env` first — that pins `RUN_ID` to `DEBUG_RUN_ID`, so the
 restore and the following step invocations agree on which run folder to use.
 
+`stock_forecast_pipeline()` also takes two optional parameters — once served
+with `pangolin deploy`, Prefect's own UI builds a run form for these from
+the flow's type hints directly, no extra deployment needed:
+- `tickers`: override `S.STOCK_TICKERS` for this run only (e.g. `["NVDA"]`).
+- `restore_from_run_id`: skip the Yahoo Finance download and restore
+  `stocks.0_raw` from that backup run instead — the UI equivalent of
+  `pangolin restore`.
+
 It's also a worked example of the two processor styles pangolin supports:
 
 | Step | Processor | Style |
