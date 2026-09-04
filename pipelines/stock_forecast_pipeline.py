@@ -1,29 +1,34 @@
 """
-Stock forecast example pipeline: Yahoo Finance download -> backup -> validate
--> historicize -> Chronos forecast.
+Stock forecast pipeline: Yahoo Finance download -> backup -> validate ->
+transform -> historicize -> Chronos forecast.
 
-Demonstrates the two processor styles side by side:
-- Steps 1, 3, 4, 5 are ad-hoc, non-pattern-match processors
-  (custom/processors/yahoo_downloader.py, history_consolidator.py,
-  chronos_forecaster.py) plus pangolin's own built-in BackupRestore. They
-  talk to the DataFacility directly — no registry, no '_pattern_matching'
-  involved.
-- Step 3 reuses pangolin's built-in, registry-driven Validator, matching
-  every '<TICKER>_STOCK_PRICES.csv' file via
-  config/registries/stock_prices_validator.yaml (pattern "*_STOCK_PRICES.csv").
+A worked example of everything a pangolin project is made of:
+- Ad-hoc, non-pattern-match processors (custom/processors/yahoo_downloader.py,
+  history_consolidator.py, chronos_forecaster.py) plus pangolin's own
+  built-in BackupRestore. They talk to the DataFacility directly — no
+  registry, no '_pattern_matching' involved.
+- Registry-driven, pattern-match processors: pangolin's built-in Validator
+  and DataTransformer, matching every '<TICKER>_STOCK_PRICES.csv' file via
+  config/registries/stock_prices_validator.yaml and
+  config/registries/stock_transform.yaml (pattern "*_STOCK_PRICES.csv").
+- A custom validator (custom/validators.py: max_daily_price_change) and a
+  custom transformer (custom/transformers.py: add_daily_return_pct),
+  registered via @register_validator / @register_transformer.
+- A custom RunContext field (custom/run_context.py: TRIGGERED_BY) — hence
+  get_run_context() below instead of instantiating RunContext() directly,
+  so that subclass is actually picked up.
 
-Data structure nodes are numbered (0_raw, 1_staging, 2_history, 3_forecast)
-so they sort in pipeline order on disk, same convention as the sales example
-pipeline's staging.0_validator/1_transform/2_audit/3_dispatcher steps.
-'backup' isn't numbered — it's a side artifact of the download step, not a
-pipeline stage of its own. 2_history and 3_forecast are single tables —
-every ticker together, distinguished by the 'ticker' column — not one file
-per ticker.
+Data structure nodes are numbered (0_raw, 1_staging, 2_transform,
+3_history, 4_forecast) so they sort in pipeline order on disk. 'backup'
+isn't numbered — it's a side artifact of the download step, not a pipeline
+stage of its own. 3_history and 4_forecast are single tables — every
+ticker together, distinguished by the 'ticker' column — not one file per
+ticker.
 
 Try it: adjust STOCK_TICKERS in .env if you want (defaults to
 ["AAPL","MSFT","AMZN"]) and run `pangolin run stock_forecast_pipeline`.
 Then open notebooks/stock_forecast_review.ipynb to review
-data/stocks/3_forecast/stock_prices_forecast.csv (history + forecast, every
+data/stocks/4_forecast/stock_prices_forecast.csv (history + forecast, every
 ticker, flagged by the 'record_type' column).
 
 Restoring a previous run's raw downloads:
@@ -49,12 +54,19 @@ from typing import List, Optional
 
 from prefect import flow, get_run_logger
 
+# Importing these modules registers the project's custom validator and
+# transformer into the dicts pangolin's Validator/DataTransformer look
+# functions up in, by name, from the registries below.
+import custom.transformers  # noqa: F401
+import custom.validators  # noqa: F401
+
 from custom.processors.chronos_forecaster import ChronosForecaster
 from custom.processors.history_consolidator import HistoryConsolidator
 from custom.processors.yahoo_downloader import YahooDownloader
-from pangolin.config.run_context import RunContext
+from pangolin.config.run_context import RunContext, get_run_context
 from pangolin.config.settings import get_settings
 from pangolin.engine.processors.BackupRestore import BackupRestore
+from pangolin.engine.processors.DataTransformer import DataTransformer
 from pangolin.engine.processors.DataValidator import Validator
 
 
@@ -92,26 +104,41 @@ def validate_flow(CTX: RunContext):
     validator.execute()
 
 
-@flow(name="4 - Historicize")
+@flow(name="4 - Transform (registry pattern-match)")
+def transform_flow(CTX: RunContext):
+    """Built-in DataTransformer, matched via config/registries/stock_transform.yaml
+    — adds a 'daily_return_pct' column (custom/transformers.py)."""
+    S = get_settings()
+    transformer = DataTransformer(
+        CTX,
+        name="stock_transform",
+        report_folder=S.REPORTS_FOLDER_NAME,
+        input_folder="stocks.1_staging.stock_prices_validator",
+        output_folder="stocks.2_transform.stock_transform",
+    )
+    transformer.execute()
+
+
+@flow(name="5 - Historicize")
 def history_flow(CTX: RunContext):
-    """Ad-hoc processor: merge this run's validated prices into the persistent history table."""
+    """Ad-hoc processor: merge this run's transformed prices into the persistent history table."""
     consolidator = HistoryConsolidator(
         CTX,
         name="history_consolidator",
-        input_folder="stocks.1_staging.stock_prices_validator",
-        output_node="stocks.2_history",
+        input_folder="stocks.2_transform.stock_transform",
+        output_node="stocks.3_history",
     )
     consolidator.execute()
 
 
-@flow(name="5 - Forecast (Chronos)")
+@flow(name="6 - Forecast (Chronos)")
 def forecast_flow(CTX: RunContext):
     """Ad-hoc processor: writes history + forecast together, every ticker, flagged by 'record_type'."""
     forecaster = ChronosForecaster(
         CTX,
         name="chronos_forecaster",
-        input_node="stocks.2_history",
-        output_node="stocks.3_forecast",
+        input_node="stocks.3_history",
+        output_node="stocks.4_forecast",
     )
     forecaster.execute()
 
@@ -131,7 +158,7 @@ def restore_flow(CTX: RunContext, run_id: str):
 
 @flow(
     name="Stock Forecast Pipeline",
-    description="Download, backup, validate, historicize and forecast stock prices",
+    description="Download, backup, validate, transform, historicize and forecast stock prices",
 )
 def stock_forecast_pipeline(
     tickers: Optional[List[str]] = None,
@@ -145,7 +172,9 @@ def stock_forecast_pipeline(
         Leave empty for a normal fresh download.
     """
     logger = get_run_logger()
-    CTX = RunContext()
+    # get_run_context() (not RunContext() directly) so that the project's
+    # custom/run_context.py subclass (TRIGGERED_BY) is actually used.
+    CTX = get_run_context()
     logger.info(f"Stock forecast pipeline started - {CTX.summary()}")
 
     if restore_from_run_id:
@@ -156,8 +185,9 @@ def stock_forecast_pipeline(
 
     s1 = backup_flow(CTX, return_state=True, wait_for=[s0])
     s2 = validate_flow(CTX, return_state=True, wait_for=[s1])
-    s3 = history_flow(CTX, return_state=True, wait_for=[s2])
-    forecast_flow(CTX, return_state=True, wait_for=[s3])
+    s3 = transform_flow(CTX, return_state=True, wait_for=[s2])
+    s4 = history_flow(CTX, return_state=True, wait_for=[s3])
+    forecast_flow(CTX, return_state=True, wait_for=[s4])
 
     logger.info("Stock forecast pipeline ended successfully")
 

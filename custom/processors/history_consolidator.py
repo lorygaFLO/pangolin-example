@@ -90,7 +90,12 @@ class HistoryConsolidator:
             if existing.schema.get("date") != pl.Date:
                 existing = existing.with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
             rows_before = len(existing)
-            combined = pl.concat([existing, new_data], how="vertical")
+            # "diagonal_relaxed" (not "vertical"): tolerates the two sides
+            # having a different column set/order — e.g. an older history
+            # file written before a new column (like daily_return_pct) was
+            # added upstream. Missing columns become null instead of
+            # raising, so the schema can evolve without breaking old data.
+            combined = pl.concat([existing, new_data], how="diagonal_relaxed")
         else:
             rows_before = 0
             combined = new_data

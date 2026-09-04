@@ -1,5 +1,0 @@
-# Registry for the audit step (step 2), consumed by the example custom
-# processor in custom/processors/example_processor.py.
-
-"*sales*":
-  count_nulls: true

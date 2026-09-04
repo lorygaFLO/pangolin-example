@@ -1,4 +1,0 @@
-# Registry for the delivery dispatch step (step 3).
-# Maps file-name glob patterns to a destination subfolder in delivery/.
-
-"*sales*": "SALES"

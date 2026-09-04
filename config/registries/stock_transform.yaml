@@ -1,0 +1,12 @@
+# Registry for the transform step (pipelines/stock_forecast_pipeline.py).
+# Same pattern as the validation registry — one glob covers every ticker.
+# Transforms run in `order`. Custom transformer defined in custom/transformers.py.
+
+"*_STOCK_PRICES.csv":
+  transforms:
+    - name: "daily_return"
+      function: "add_daily_return_pct"
+      params:
+        price_column: close
+        output_column: daily_return_pct
+      order: 1

@@ -31,9 +31,10 @@ from pangolin.utils.fs_wrapper import FSWrapper
 # Output column order, shared by history rows and forecast rows — that's
 # what lets them live in the same table. Plain "vertical" concat matches by
 # position, not by name, so both sides must select() into this exact order
-# before being combined. Extends the shared base schema with the two
+# before being combined. Extends the shared base schema with 'daily_return_pct'
+# (added upstream by the transform step, custom/transformers.py) and the
 # columns unique to this step.
-_OUTPUT_COLUMNS = STOCK_PRICE_COLUMNS + ["record_type", "forecast_low", "forecast_high"]
+_OUTPUT_COLUMNS = STOCK_PRICE_COLUMNS + ["daily_return_pct", "record_type", "forecast_low", "forecast_high"]
 
 
 def _next_trading_days(start_date, count: int) -> list:
@@ -117,10 +118,11 @@ class ChronosForecaster:
 
         # Only close/forecast_low/forecast_high/record_type are real values
         # here — polars infers their dtype fine from the data itself.
-        # open/high/low/volume aren't forecast (Chronos predicts 'close'
-        # only), so they're added as explicitly-typed nulls: a bare `None`
-        # list has no dtype for polars to infer, which would make the
-        # concat below (history rows are real Float64/Int64) fail.
+        # open/high/low/volume/daily_return_pct aren't forecast (Chronos
+        # predicts 'close' only), so they're added as explicitly-typed
+        # nulls: a bare `None` list has no dtype for polars to infer, which
+        # would make the concat below (history rows are real Float64/Int64)
+        # fail.
         return pl.DataFrame({
             "ticker": [ticker] * horizon,
             "date": forecast_dates,
@@ -133,6 +135,7 @@ class ChronosForecaster:
             pl.lit(None, dtype=pl.Float64).alias("high"),
             pl.lit(None, dtype=pl.Float64).alias("low"),
             pl.lit(None, dtype=pl.Int64).alias("volume"),
+            pl.lit(None, dtype=pl.Float64).alias("daily_return_pct"),
         ).select(_OUTPUT_COLUMNS)
 
     def execute(self):

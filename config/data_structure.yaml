@@ -1,38 +1,7 @@
 # Data structure of the project. Folder names marked with `_settings_key`
 # are resolved from Settings (overridable via .env).
-# Staging step nodes declare both `_pattern_matching: true` and `_registry`
-# (the registry YAML driving that step).
-
-input:
-  _description: "Folder with input files"
-  _settings_key: "INPUT_FOLDER_NAME"
-
-staging:
-  _description: "Processing area"
-  _settings_key: "STAGING_FOLDER_NAME"
-  _timestamped: true
-  0_validator:
-    _pattern_matching: true
-    _registry: "config/registries/0_raw_validation.yaml"
-  1_transform:
-    _pattern_matching: true
-    _registry: "config/registries/1_transform.yaml"
-  2_audit:
-    _pattern_matching: true
-    _registry: "config/registries/2_audit.yaml"
-  3_dispatcher:
-    _pattern_matching: true
-    _registry: "config/registries/3_dispatcher.yaml"
-
-delivery:
-  _description: "Final output"
-  _settings_key: "DELIVERY_FOLDER_NAME"
-  _timestamped: true
-
-backup:
-  _description: "Backup folder"
-  _settings_key: "BACKUP_FOLDER_NAME"
-  _timestamped: true
+# Pattern-match step nodes declare both `_pattern_matching: true` and
+# `_registry` (the registry YAML driving that step).
 
 reports:
   _description: "Report files"
@@ -43,13 +12,13 @@ reports:
 static:
   _description: "Static support files"
 
-# --- Stock forecast example (see pipelines/stock_forecast_pipeline.py) ---
-# raw/staging are ephemeral (_timestamped: true -> a new data/stocks/.../<RUN_ID>/
-# folder every run). history/forecast are NOT timestamped: same path every
-# run, so history can accumulate and the notebook always finds the latest
-# forecast at a fixed location.
+# --- Stock forecast pipeline (see pipelines/stock_forecast_pipeline.py) ---
+# 0_raw/1_staging/2_transform are ephemeral (_timestamped: true -> a new
+# data/stocks/.../<RUN_ID>/ folder every run). 3_history/4_forecast are NOT
+# timestamped: same path every run, so history can accumulate and the
+# notebook always finds the latest forecast at a fixed location.
 stocks:
-  _description: "Yahoo Finance download -> validation -> history -> Chronos forecast"
+  _description: "Yahoo Finance download -> validation -> transform -> history -> Chronos forecast"
 
   0_raw:
     _description: "Per-ticker OHLCV CSVs freshly downloaded from Yahoo Finance"
@@ -66,10 +35,17 @@ stocks:
       _pattern_matching: true
       _registry: "config/registries/stock_prices_validator.yaml"
 
-  2_history:
+  2_transform:
+    _description: "Per-ticker files with a daily_return_pct column added, per config/registries/stock_transform.yaml"
+    _timestamped: true
+    stock_transform:
+      _pattern_matching: true
+      _registry: "config/registries/stock_transform.yaml"
+
+  3_history:
     _description: "Single table, all tickers together (see 'ticker' column): persistent price history, deduplicated by (ticker, date) and accumulated across runs"
     _filename: "stock_prices_history.csv"
 
-  3_forecast:
+  4_forecast:
     _description: "Single table, all tickers together: history + Chronos forecast rows, flagged by 'record_type'"
     _filename: "stock_prices_forecast.csv"
