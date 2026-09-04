@@ -146,12 +146,17 @@ class ChronosForecaster:
         if not tickers:
             raise NoInputFilesError(self.name, str(self.input_node.path))
 
+        self.log.info(
+            f"Forecasting {len(tickers)} ticker(s): {tickers} "
+            f"({self.S.STOCK_FORECAST_HORIZON} day(s) ahead, {self.S.STOCK_FORECAST_NUM_SAMPLES} sample(s) each)"
+        )
+
         per_ticker_tables = []
-        for ticker in tickers:
+        for i, ticker in enumerate(tickers, start=1):
             ticker_history = history.filter(pl.col("ticker") == ticker).sort("date")
             self.log.info(
-                f"Forecasting '{ticker}': {self.S.STOCK_FORECAST_HORIZON} day(s) ahead "
-                f"from {len(ticker_history)} historical row(s)"
+                f"[{i}/{len(tickers)}] Forecasting '{ticker}' from {len(ticker_history)} historical row(s) "
+                f"({ticker_history['date'].min()} -> {ticker_history['date'].max()})"
             )
 
             history_rows = ticker_history.with_columns(
@@ -162,10 +167,20 @@ class ChronosForecaster:
             forecast_rows = self._forecast_ticker(ticker_history)
             per_ticker_tables.append(pl.concat([history_rows, forecast_rows], how="vertical"))
 
+            last_close = ticker_history["close"][-1]
+            last_forecast = forecast_rows.tail(1).row(0, named=True)
+            self.log.info(
+                f"[{i}/{len(tickers)}] '{ticker}' done: last actual close {last_close:.2f} "
+                f"({ticker_history['date'][-1]}) -> forecast {last_forecast['close']:.2f} "
+                f"[{last_forecast['forecast_low']:.2f}, {last_forecast['forecast_high']:.2f}] "
+                f"on {last_forecast['date']}"
+            )
+
         combined = pl.concat(per_ticker_tables, how="vertical").sort(["ticker", "date"])
         self.output_node.write(combined)
 
         self.log.info(
-            f"Wrote {len(combined)} row(s) across {len(tickers)} ticker(s) to '{self.output_node.path}'"
+            f"Forecast complete: wrote {len(combined)} row(s) across {len(tickers)} ticker(s) "
+            f"to '{self.output_node.path}'"
         )
         return tickers

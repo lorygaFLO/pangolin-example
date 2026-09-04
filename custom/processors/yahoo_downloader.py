@@ -90,12 +90,19 @@ class YahooDownloader:
         if not tickers:
             raise PipelineError(f"[{self.name}] S.STOCK_TICKERS is empty — nothing to download.")
 
+        self.log.info(
+            f"Starting download for {len(tickers)} ticker(s): {tickers} "
+            f"(period={self.S.STOCK_HISTORY_PERIOD}) -> '{self.output_node.path}'"
+        )
+
         written = []
-        for ticker in tickers:
-            self.log.info(f"Downloading '{ticker}' from Yahoo Finance (period={self.S.STOCK_HISTORY_PERIOD})")
+        skipped = []
+        for i, ticker in enumerate(tickers, start=1):
+            self.log.info(f"[{i}/{len(tickers)}] Downloading '{ticker}' from Yahoo Finance")
             df = self._download_one(ticker)
             if df is None:
-                self.log.warning(f"No data returned for '{ticker}' — skipping")
+                self.log.warning(f"[{i}/{len(tickers)}] No data returned for '{ticker}' — skipping")
+                skipped.append(ticker)
                 continue
 
             filename = f"{ticker}_STOCK_PRICES.csv"
@@ -103,10 +110,18 @@ class YahooDownloader:
             with self.fs.open(output_path, "wb") as f:
                 df.write_csv(f, separator=self.S.CSV_DELIMITER)
 
-            self.log.info(f"Wrote {len(df)} row(s) to '{output_path}'")
+            first_date, last_date = df["date"].min(), df["date"].max()
+            self.log.info(
+                f"[{i}/{len(tickers)}] Wrote {len(df)} row(s) for '{ticker}' "
+                f"({first_date} -> {last_date}) to '{output_path}'"
+            )
             written.append(filename)
 
         if not written:
             raise PipelineError(f"[{self.name}] Yahoo Finance returned no data for any of {tickers}.")
 
+        self.log.info(
+            f"Download complete: {len(written)}/{len(tickers)} ticker(s) written"
+            + (f", {len(skipped)} skipped ({skipped})" if skipped else "")
+        )
         return written

@@ -77,14 +77,22 @@ class HistoryConsolidator:
         if not files:
             raise NoInputFilesError(self.name, str(self.input_node.path))
 
-        new_data = pl.concat([self._read_any(f) for f in files], how="vertical")
+        self.log.info(f"Merging {len(files)} validated file(s) from '{self.input_node.path}'")
+        frames = []
+        for f in files:
+            df = self._read_any(f)
+            self.log.info(f"  - read {len(df)} row(s) from '{self.fs.basename(f)}'")
+            frames.append(df)
+        new_data = pl.concat(frames, how="vertical")
 
         if self.output_node.exists():
             existing = self.output_node.read()
             if existing.schema.get("date") != pl.Date:
                 existing = existing.with_columns(pl.col("date").str.to_date("%Y-%m-%d"))
+            rows_before = len(existing)
             combined = pl.concat([existing, new_data], how="vertical")
         else:
+            rows_before = 0
             combined = new_data
 
         # keep="last" -> when a (ticker, date) already exists, the freshly
@@ -93,8 +101,9 @@ class HistoryConsolidator:
         self.output_node.write(combined)
 
         tickers = combined["ticker"].unique().sort().to_list()
+        added = len(combined) - rows_before  # genuinely new rows, after dedup (can be 0 on a same-day re-run)
         self.log.info(
             f"History store now holds {len(combined)} row(s) across {len(tickers)} ticker(s) "
-            f"({len(new_data)} new row(s) from this run) -> '{self.output_node.path}'"
+            f"({added} row(s) actually added this run) -> '{self.output_node.path}'"
         )
         return tickers

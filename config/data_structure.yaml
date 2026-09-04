@@ -55,6 +55,10 @@ stocks:
     _description: "Per-ticker OHLCV CSVs freshly downloaded from Yahoo Finance"
     _timestamped: true
 
+  backup:
+    _description: "Timestamped copy of each run's raw downloads — restore with 'pangolin restore <run_id> --pipeline stock_forecast_pipeline'"
+    _timestamped: true
+
   1_staging:
     _description: "Per-ticker files validated against config/registries/stock_prices_validator.yaml"
     _timestamped: true

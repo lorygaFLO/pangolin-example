@@ -109,14 +109,28 @@ accumulates it into a persistent history, and forecasts
    distinguished by the `record_type` column (`"history"` / `"forecast"`) —
    no database, no separate forecast file.
 
+Every run also backs up its raw downloads (`data/stocks/backup/<run_id>/`),
+using pangolin's built-in `BackupRestore`. To bring a previous run's raw
+data back (e.g. to reprocess it without re-downloading):
+
+```bash
+pangolin restore <run_id> --pipeline stock_forecast_pipeline
+```
+
+This restores into a *new* run's `stocks.0_raw`. To then reprocess that
+exact data with `pangolin step stock_forecast_pipeline <step>`, set
+`DEBUG=True` in `.env` first — that pins `RUN_ID` to `DEBUG_RUN_ID`, so the
+restore and the following step invocations agree on which run folder to use.
+
 It's also a worked example of the two processor styles pangolin supports:
 
 | Step | Processor | Style |
 | --- | --- | --- |
 | 1. Download | `custom/processors/yahoo_downloader.py` | ad-hoc (no registry) |
-| 2. Validate | pangolin's built-in `Validator` | registry pattern-match, `config/registries/stock_prices_validator.yaml` (`"*_STOCK_PRICES.csv"`) |
-| 3. Historicize | `custom/processors/history_consolidator.py` | ad-hoc (no registry) |
-| 4. Forecast | `custom/processors/chronos_forecaster.py` | ad-hoc (no registry) |
+| 2. Backup | pangolin's built-in `BackupRestore` | ad-hoc (no registry) |
+| 3. Validate | pangolin's built-in `Validator` | registry pattern-match, `config/registries/stock_prices_validator.yaml` (`"*_STOCK_PRICES.csv"`) |
+| 4. Historicize | `custom/processors/history_consolidator.py` | ad-hoc (no registry) |
+| 5. Forecast | `custom/processors/chronos_forecaster.py` | ad-hoc (no registry) |
 
 ## Running it in Docker
 
