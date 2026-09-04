@@ -118,12 +118,12 @@ Plus this project's own, added in `custom/settings.py` (see below):
 
 Not in the table above because it's read directly by pangolin's CLI, not by
 `SETTINGS`: **`PREFECT_HOME`** — this project's local Prefect state
-directory, isolating it from other pangolin projects on this machine. Set
-in `.env` as `.prefect/${PROJECT_NAME}`. `pangolin run` / `deploy` /
-`bootstrap` pick it up automatically; if you also run the bare
-`prefect server start` (e.g. to use the dashboard), export the same value
-in that shell first — see "Running via the Prefect UI" in the pangolin
-library's Getting Started doc.
+directory, isolating it from other pangolin projects on this machine.
+Defaults to `.prefect/<PROJECT_NAME>` automatically (nothing to set in
+`.env`); `pangolin run` / `deploy` / `bootstrap` derive it from
+`PROJECT_NAME` above. If you also run the bare `prefect server start` (e.g.
+to use the dashboard), export the same value in that shell first — see
+"Running via the Prefect UI" in the pangolin library's Getting Started doc.
 
 ## Folder settings (from `config/data_structure.yaml`)
 
