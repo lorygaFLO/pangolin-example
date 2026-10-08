@@ -7,7 +7,7 @@ forecast example pipeline.
 
 No registry, no pattern matching on its own output: it reads every file the
 previous step (the built-in Validator) produced and writes straight through
-the DataFacility, following the same standalone-class convention as
+the DataCatalog, following the same standalone-class convention as
 pangolin's own BackupRestore processor.
 """
 
@@ -17,7 +17,7 @@ import polars as pl
 
 from pangolin.config.run_context import RunContext
 from pangolin.config.settings import get_settings
-from pangolin.engine.DataFacility import get_project_data
+from pangolin.engine.DataCatalog import get_project_data
 from pangolin.engine.common.exceptions import NoInputFilesError
 from pangolin.engine.common.logger import ProcessorLogger
 from pangolin.utils.fs_wrapper import FSWrapper
@@ -55,7 +55,7 @@ class HistoryConsolidator:
         """Read one glob-matched staging file regardless of format (the
         Validator step writes S.OUTPUT_FORMAT, csv or parquet) and make sure
         'date' always comes back as a proper pl.Date column. These are plain
-        matched paths, not declared DataFacility nodes, so they can't go
+        matched paths, not declared DataCatalog nodes, so they can't go
         through node.read() — this is the one place a manual reader is
         actually needed.
         """

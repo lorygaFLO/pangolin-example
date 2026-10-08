@@ -6,7 +6,7 @@ historical rows and the forecast rows for every ticker — distinguished by a
 'record_type' column ('history' | 'forecast'). No per-ticker files, no
 database: everything lives in one table, one write per run.
 
-No registry, no pattern matching: it reads/writes through the DataFacility
+No registry, no pattern matching: it reads/writes through the DataCatalog
 directly, following the same standalone-class convention as pangolin's own
 BackupRestore processor.
 """
@@ -23,7 +23,7 @@ from chronos import ChronosPipeline
 from custom.processors._schema import STOCK_PRICE_COLUMNS
 from pangolin.config.run_context import RunContext
 from pangolin.config.settings import get_settings
-from pangolin.engine.DataFacility import get_project_data
+from pangolin.engine.DataCatalog import get_project_data
 from pangolin.engine.common.exceptions import NoInputFilesError
 from pangolin.engine.common.logger import ProcessorLogger
 from pangolin.utils.fs_wrapper import FSWrapper

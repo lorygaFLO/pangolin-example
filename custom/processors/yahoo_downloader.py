@@ -19,7 +19,7 @@ import yfinance as yf
 from custom.processors._schema import STOCK_PRICE_COLUMNS
 from pangolin.config.run_context import RunContext
 from pangolin.config.settings import get_settings
-from pangolin.engine.DataFacility import get_project_data
+from pangolin.engine.DataCatalog import get_project_data
 from pangolin.engine.common.exceptions import PipelineError
 from pangolin.engine.common.logger import ProcessorLogger
 from pangolin.utils.fs_wrapper import FSWrapper

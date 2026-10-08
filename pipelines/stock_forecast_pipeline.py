@@ -5,7 +5,7 @@ transform -> historicize -> Chronos forecast.
 A worked example of everything a pangolin project is made of:
 - Ad-hoc, non-pattern-match processors (custom/processors/yahoo_downloader.py,
   history_consolidator.py, chronos_forecaster.py) plus pangolin's own
-  built-in BackupRestore. They talk to the DataFacility directly — no
+  built-in BackupRestore. They talk to the DataCatalog directly — no
   registry, no '_pattern_matching' involved.
 - Registry-driven, pattern-match processors: pangolin's built-in Validator
   and DataTransformer, matching every '<TICKER>_STOCK_PRICES.csv' file via
