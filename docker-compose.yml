@@ -1,0 +1,108 @@
+name: ${PROJECT_NAME:-pangolin}
+
+# =====================================================================
+# Pangolin Docker stack
+#
+# Services
+#   prefect-server : Prefect 3 server + UI, persistent SQLite on a volume
+#   bootstrap      : one-shot, idempotent — creates Blocks/Variables from
+#                    docker/prefect_manifest.yaml via `pangolin bootstrap`;
+#                    re-runs are safe
+#   worker         : runs `pangolin deploy` (flow.serve() for every pipeline
+#                    in this project's pipelines/ package)
+#   caddy          : reverse proxy so the UI is reachable on
+#                    http://localhost:${PROXY_PORT}
+#                    http://${PROJECT_NAME}.localhost:${PROXY_PORT}
+#                    (and on ${PUBLIC_HOSTNAME} in cloud mode)
+# =====================================================================
+
+x-pangolin-build: &pangolin-build
+  context: .
+  dockerfile: docker/Dockerfile
+  args:
+    GIT_BRANCH: ${GIT_BRANCH:-unknown}
+    GIT_SHA: ${GIT_SHA:-unknown}
+
+x-pangolin-image: &pangolin-image
+  image: pangolin:${GIT_BRANCH:-local}
+
+services:
+
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    command: prefect server start --host 0.0.0.0 --port 4200
+    environment:
+      PREFECT_HOME: /data/prefect
+      PREFECT_SERVER_API_HOST: 0.0.0.0
+      PREFECT_SERVER_API_PORT: "4200"
+      # URL that the BROWSER uses to talk to the API. Must be reachable
+      # from outside the container network.
+      PREFECT_UI_API_URL: ${PREFECT_UI_API_URL:-http://localhost:8080/api}
+    volumes:
+      - prefect-data:/data/prefect
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4200/api/health',timeout=3).status<500 else 1)\""]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    restart: unless-stopped
+
+  bootstrap:
+    build: *pangolin-build
+    <<: *pangolin-image
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PANGOLIN_MANIFEST: ${PANGOLIN_MANIFEST:-docker/prefect_manifest.yaml}
+      GIT_BRANCH: ${GIT_BRANCH:-unknown}
+      GIT_SHA: ${GIT_SHA:-unknown}
+    env_file:
+      - docker/.env.docker
+    command: ["pangolin", "bootstrap"]
+    restart: "no"
+
+  worker:
+    build: *pangolin-build
+    <<: *pangolin-image
+    depends_on:
+      prefect-server:
+        condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      PREFECT_API_URL: http://prefect-server:4200/api
+      PANGOLIN_MODE: ${PANGOLIN_MODE:-docker-local}
+      PANGOLIN_MANIFEST: ${PANGOLIN_MANIFEST:-docker/prefect_manifest.yaml}
+      PANGOLIN_CRON: ${PANGOLIN_CRON:-}
+      GIT_BRANCH: ${GIT_BRANCH:-unknown}
+      GIT_SHA: ${GIT_SHA:-unknown}
+    env_file:
+      - docker/.env.docker
+    volumes:
+      # Bind-mount the host data folder so input/output is visible from outside
+      - ./data:/app/data
+    command: ["pangolin", "deploy"]
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      - prefect-server
+    environment:
+      PROJECT_NAME: ${PROJECT_NAME:-pangolin}
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-}
+    ports:
+      - "${PROXY_PORT:-8080}:80"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  prefect-data:
+  caddy-data:
+  caddy-config:

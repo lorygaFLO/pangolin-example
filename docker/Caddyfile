@@ -1,0 +1,28 @@
+# Caddy reverse proxy in front of the Prefect UI/API.
+#
+# - In `docker-local` mode, PUBLIC_HOSTNAME is left empty and the proxy
+#   answers on `localhost` and `<PROJECT_NAME>.localhost` (modern browsers
+#   resolve `*.localhost` to 127.0.0.1, so no /etc/hosts edits needed).
+# - In `cloud` mode, set PUBLIC_HOSTNAME=your.public.host and Caddy will
+#   serve it (still HTTP — wire HTTPS in your cloud LB or replace `http://`
+#   with `https://` to let Caddy do ACME).
+#
+# TODO(auth): plug Caddy basicauth here once we want to lock the UI down:
+#   basicauth {
+#       admin JDJhJDEy...   # `caddy hash-password`
+#   }
+
+{
+    auto_https off
+    admin off
+}
+
+# Site addresses are templated from env at container start.
+# `{$VAR:default}` expands to default if VAR is empty / unset.
+http://{$PUBLIC_HOSTNAME:localhost}, http://{$PROJECT_NAME:pangolin}.localhost {
+    encode gzip
+    reverse_proxy prefect-server:4200 {
+        # Prefect UI uses websockets for live updates
+        flush_interval -1
+    }
+}
